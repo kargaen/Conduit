@@ -88,10 +88,31 @@ port TaskStore {
   seen(id: string): boolean        // exact-dedup check
   cursor(sourceId): Cursor         // watermark per source
 }
+
+// LLM provider — abstraction over any model backend.
+// Orchestration passes a tier hint; if the provider has only one model
+// configured, it is used for both tiers — never fail on a missing tier.
+port LLMProvider {
+  id: string                              // "anthropic", "openai", …
+  complete(
+    prompt: string,
+    output_schema: JSONSchema,
+    tier: "bulk" | "accurate"            // bulk = fast/cheap; accurate = quality
+  ): structured_output                    // validated against output_schema
+}
+
+// Registry holds one or more LLMProvider implementations.
+// active_provider() returns the configured default.
+// Switching providers = change config, not code.
+port LLMRegistry {
+  register(provider: LLMProvider): void
+  active_provider(): LLMProvider
+}
 ```
 
 Adding "whatever meeting platform" = implement `Source`. Adding a target = implement
-`Sink`. The core and orchestration never change for either.
+`Sink`. Adding a model backend = implement `LLMProvider` and register it.
+The core and orchestration never change for any of these.
 
 **`Decision: open`** — whether the deterministic fast-path (explicit `TODO:` syntax)
 is a second `Extractor` implementation or a pre-filter in orchestration. Lean:
@@ -128,8 +149,10 @@ the decision is principled when made.
 
 | Concern | Leaning | Must satisfy | Status |
 | --- | --- | --- | --- |
-| Language | Python | First-class LLM SDK, embedding libs, reMarkable tooling | `Decision: open` |
-| Extraction model | — | Structured/JSON-schema output, confidence scoring | `Decision: open` |
+| Language | Python | First-class LLM SDK, embedding libs, reMarkable tooling | **Python** |
+| LLM provider | Anthropic (Claude) | Interchangeable via `LLMProvider` port; bulk + accurate tiers | **Anthropic default** |
+| Extraction model — bulk | claude-haiku-4-5 | Fast, cheap, high-volume runs | `Decision: open` |
+| Extraction model — accurate | claude-sonnet-4-6 | Quality, ambiguous intent, date resolution | `Decision: open` |
 | Persistence | Postgres | Managed free tier in dev, idempotent upsert by `id` | `Decision: open` |
 | reMarkable access | `ddvk/rmapi` fork or USB web UI | Non-interactive, scriptable | `Decision: open` |
 | Embeddings (later) | — | Similarity search for semantic dedup | deferred |
@@ -207,11 +230,14 @@ touch the domain core or orchestration.
 Resolve as the dependent slice arrives — not earlier (per Assumption Policy).
 
 ```
-[ ] Language + project layout  (§4, §5)
-[ ] Extraction model/provider + where its key lives  (§5, §6)
-[ ] Persistence engine + dev free-tier choice  (§5)
-[ ] reMarkable access method: cloud fork vs USB  (§5)
-[ ] Fast-path: separate Extractor vs orchestration pre-filter  (§3)
-[ ] MVP sink: webhook vs .ics/JSON file drop  (epic open question)
-[ ] Trigger: scheduled poll vs webhook for v1  (epic open question)
+[x] Language + project layout  → Python; src/ layout per §4
+[x] LLM provider abstraction  → LLMProvider + LLMRegistry ports (§3); Anthropic default
+[x] Extraction model tiers    → bulk: claude-haiku-4-5 / accurate: claude-sonnet-4-6; single-model providers use one for both
+[x] Fast-path                 → pre-filter in orchestration (not a second Extractor)
+[x] MVP sink                  → Jot via HTTP (Supabase Edge Function + scoped bearer token); direct DB insert for local dev only
+[ ] Bulk / accurate model IDs → confirm claude-haiku-4-5 and claude-sonnet-4-6 are the right model IDs
+[ ] Persistence engine        → dev free-tier choice (§5)
+[ ] reMarkable access method  → cloud fork vs USB (§5)
+[ ] Trigger                   → scheduled poll vs webhook for v1
+[ ] Confidence defaults       → threshold value + fallback action shipped in default config
 ```
