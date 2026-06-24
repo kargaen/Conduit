@@ -28,6 +28,25 @@ stable contract" is **ports and adapters**:
 arrives, is a separate bounded module that *follows* the MVC conventions in
 `AGENTS.md` and consumes the core; it does not live inside it.
 
+### Engine vs. Chassis
+
+**Conduit is the engine** — the steering wheel, gearbox, and drivetrain. It
+provides the pipeline logic, the canonical model, the port contracts, and the
+adapter implementations. It is a standalone Python package with no dependency
+on any hosting platform.
+
+**Integrations are the chassis** — the fuel, the body, the ignition. An
+integration wires Conduit's engine into a specific hosting environment
+(Home Assistant, a cron container, a serverless function) by implementing the
+composition root. It calls `conduit.orchestration.run_pipeline()` with whatever
+implementations it chooses to supply.
+
+This means anyone can build their own car with Conduit. The HA integration is
+the reference chassis — it is what *we* build against, but the engine runs
+equally well in any other chassis. An advanced integration may also substitute
+individual pipeline links (e.g. replace the LLM extractor with its own parser)
+while keeping the rest of the chain intact — see §11.
+
 ---
 
 ## 2. Layers & Dependency Direction
@@ -122,23 +141,61 @@ pre-filter, so the LLM extractor stays single-purpose.
 
 ## 4. Module / File Structure
 
-A *shape*, not a mandate — the exact tree follows the chosen language's idioms.
-Group by layer, not by feature, so the dependency direction is visible on disk.
+Grouped by layer, not by feature — the dependency direction is visible on disk.
+The project has three top-level concerns: the engine package, the integrations,
+and tests.
 
 ```
-src/
-  core/            // pure domain — Task model, dedup, ports. No I/O.
-  extraction/      // Extractor implementations (LLM + rules)
+conduit/                    # pip-installable package — the engine
+  __init__.py
+  core/                     # pure domain: Task, SourceRef, ports, dedup. No I/O.
+  extraction/               # Extractor implementations
+    llm.py                  # LLM-backed extractor (uses LLMProvider port)
+    rules.py                # deterministic fast-path (TODO: syntax)
   adapters/
-    sources/       // remarkable/, teams/, ... one folder per platform
-    sinks/         // caldav/, todotxt/, webhook/, markdown/
-    store/         // TaskStore implementation(s)
-  orchestration/   // composition root, the pipeline run, scheduling
-  config/          // env loading, per-connector credentials
+    sources/                # one folder per platform
+      home_assistant/       # receives pushes from HA webhook
+      remarkable/           # polls reMarkable cloud or USB
+      transcript/           # generic transcript file adapter
+    sinks/
+      jot/                  # Jot via Supabase Edge Function
+      todotxt/              # plain-text todo.txt
+      markdown/             # Obsidian-style checkbox lists
+    store/                  # TaskStore implementations
+      sqlite.py             # Phase 0: local SQLite file
+      postgres.py           # Phase 1+: managed Postgres
+    llm/                    # LLMProvider implementations
+      anthropic.py          # Claude (bulk + accurate tiers)
+      ollama.py             # local Ollama (fully offline option)
+  orchestration/            # pipeline runner — accepts Protocol implementations
+    pipeline.py             # run_pipeline(sources, extractor, sink, store, config)
+  config/                   # settings dataclasses, env + HA secrets loading
+
+integrations/               # hosting wrappers — the chassis, framework-specific only
+  home_assistant/           # reference integration
+    custom_components/
+      conduit/
+        __init__.py         # HA entry point: calls conduit.orchestration.run_pipeline()
+        manifest.json       # HACS / HA manifest
+        services.yaml       # exposes run_pipeline as an HA service call
+        config_flow.py      # HA UI for credentials + confidence settings
+
+tests/                      # mirrors conduit/ layer structure
+  core/
+  extraction/
+  adapters/
+  orchestration/
 ```
 
-**`Decision: open`** — language-specific layout (package vs. module vs. folder
-conventions) is set once §6 lands.
+**Code pattern:** every inter-layer dependency is via a `Protocol` defined in
+`conduit/core/ports.py`. No concrete class is imported across layer boundaries —
+only the Protocol type. `isinstance` checks against Protocols are forbidden;
+duck typing is the contract. The pipeline runner is a plain function that accepts
+Protocol-typed arguments; the integration's composition root is the only place
+that instantiates concrete adapters and passes them in.
+
+> **Side note:** current code lives at `src/core/task.py`. This needs to move to
+> `conduit/core/task.py` before the package is installable. Tracked in §10.
 
 ---
 
@@ -225,19 +282,97 @@ touch the domain core or orchestration.
 
 ---
 
+## 11. Pipeline Composability — Swappable Chain
+
+The pipeline is a chain of independently swappable links. Conduit ships default
+implementations for every link; an integration may replace any single link while
+keeping the rest unchanged.
+
+```
+Source ──▶ Extractor ──▶ Core (dedup + model) ──▶ Sink
+             ▲                                      ▲
+         swap for                               swap for
+         own parser                             own target
+```
+
+| Link | Default | Swap condition |
+| --- | --- | --- |
+| `Source` | HA webhook / reMarkable | New platform to ingest from |
+| `Extractor` | LLM via `LLMProvider` | Integration has its own NLP parser |
+| `LLMProvider` | Anthropic Claude | Cost preference, local/offline (Ollama), other vendor |
+| `TaskStore` | SQLite | Scale (Postgres), cloud (Supabase) |
+| `Sink` | Jot/Supabase | Different todo app, CalDAV, file export |
+
+**Minimum viable integration** needs only: one `Source`, one `Extractor` (or the
+rules fast-path only), one `Sink`, and a call to `run_pipeline()`. Everything
+else is optional enrichment.
+
+**What does not change between integrations:** the canonical `Task` model and the
+`dedup_id` function. These are the only things both sides of the pipeline share.
+An integration that bypasses extraction still produces `Task` objects in the
+canonical shape before handing them to a sink.
+
+---
+
+## 12. North Star: Multi-Output Extraction & Task Kinds
+
+The target use case that shapes the extractor's output contract:
+
+> *"I will have my 40th birthday Friday in 3 weeks — plan for shopping and sending
+> out invitations. What else do I need to do?"*
+
+Expected pipeline output — **three tasks from one voice input:**
+
+1. `kind: action` — "Buy birthday party supplies" · due: 3 weeks · priority: normal
+2. `kind: action` — "Send out birthday invitations" · due: 3 weeks · priority: high
+3. `kind: planning` — "Birthday party open questions" · body: LLM-generated list of
+   things the user hasn't thought of (guest count, venue, theme, catering, cake, etc.)
+
+**Implications for the canonical model:**
+
+`Task` carries a `kind` field:
+
+```
+kind: "action" | "planning"
+```
+
+- `action` — a concrete, executable item. Always pushed to the sink.
+- `planning` — a scaffold of considerations or open questions. Pushed as a
+  single task whose `description` contains the generated list. The sink may
+  route it differently (different area, different icon).
+
+`kind` defaults to `"action"`. The extractor sets it explicitly when the LLM
+determines the output is advisory rather than executable.
+
+**Implication for the extractor output schema:**
+
+The LLM is asked to return a list of candidate tasks, each with a `kind` field.
+A single source item may produce any number of candidates of mixed kinds.
+Confidence gating applies to all kinds equally.
+
+> **Side note:** `Task.kind` needs to be added to `conduit/core/task.py`.
+> Tracked in §10.
+
+---
+
 ## 10. Open Decisions Log
 
 Resolve as the dependent slice arrives — not earlier (per Assumption Policy).
 
 ```
-[x] Language + project layout  → Python; src/ layout per §4
+[x] Language                  → Python
 [x] LLM provider abstraction  → LLMProvider + LLMRegistry ports (§3); Anthropic default
 [x] Extraction model tiers    → bulk: claude-haiku-4-5 / accurate: claude-sonnet-4-6; single-model providers use one for both
 [x] Fast-path                 → pre-filter in orchestration (not a second Extractor)
-[x] MVP sink                  → Jot via HTTP (Supabase Edge Function + scoped bearer token); direct DB insert for local dev only
-[ ] Bulk / accurate model IDs → confirm claude-haiku-4-5 and claude-sonnet-4-6 are the right model IDs
-[ ] Persistence engine        → dev free-tier choice (§5)
-[ ] reMarkable access method  → cloud fork vs USB (§5)
-[ ] Trigger                   → scheduled poll vs webhook for v1
-[ ] Confidence defaults       → threshold value + fallback action shipped in default config
+[x] MVP sink                  → Jot via HTTP (Supabase Edge Function + scoped bearer token)
+[x] Phase 0 hosting           → Home Assistant (BYO); integrations/home_assistant/ is reference chassis
+[x] Pipeline composability    → swappable chain via Protocol interfaces (§11)
+[x] Multi-output extraction   → extractor returns list of mixed-kind candidates (§12)
+[ ] Package layout            → rename src/ → conduit/ for installable package
+[ ] Task.kind field           → add "action" | "planning" to core/task.py
+[ ] Bulk / accurate model IDs → confirm claude-haiku-4-5 and claude-sonnet-4-6 are correct
+[ ] Persistence engine        → SQLite for Phase 0 (confirmed); Postgres for Phase 1
+[ ] reMarkable access method  → cloud fork vs USB
+[ ] Trigger                   → HA automation (time-based) for poll; HA webhook for push
+[ ] Confidence defaults       → threshold value + fallback action in default config
 ```
