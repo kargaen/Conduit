@@ -8,6 +8,11 @@ from enum import Enum
 from typing import Any
 
 
+class TaskKind(str, Enum):
+    ACTION = "action"      # concrete, executable item
+    PLANNING = "planning"  # advisory scaffold — questions or considerations
+
+
 class Priority(str, Enum):
     LOW = "low"
     NORMAL = "normal"
@@ -35,6 +40,7 @@ class Task:
     source_ref: SourceRef
     confidence: float                       # 0.0–1.0 from extractor
     created: datetime
+    kind: TaskKind = TaskKind.ACTION
     due: datetime | None = None
     priority: Priority | None = None        # None = not inferred
     status: Status = Status.OPEN
