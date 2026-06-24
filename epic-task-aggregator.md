@@ -208,20 +208,30 @@ Deliberately **excluded from the MVP** (added later, not now):
 
 The workload is **not** an always-on busy server. It is a periodic batch job, an
 occasional webhook receiver, and one genuinely always-on light piece (the CalDAV
-endpoint, deferred). Hosting follows that shape. Free-tier specifics shift fast —
-re-verify before committing; this captures the *shape*, not fixed quotas.
+endpoint, deferred). Hosting follows that shape.
 
-### Phase 0 — Dev / free
-- **Orchestrator:** scheduled job (GitHub Actions cron is the clean hobby answer —
-  free compute, built-in secrets, no server).
-- **State:** free managed Postgres (Supabase / Neon), or a committed state file
-  while tiny.
-- **Sink:** file-based (`.ics`/JSON) to dodge running a CalDAV server.
-- **Note:** Fly.io and Railway no longer offer a real free tier; Render's free
-  tier spins down (~30–50s cold start) — fine for a background job.
+### Phase 0 — Home Assistant (BYO infrastructure)
+The primary Phase 0 host is **Home Assistant** running on the user's own hardware
+(RPi, NAS, home server). This is strictly better than GitHub Actions for this use
+case: always-on, BYO cost, built-in scheduler and webhook receiver, and native
+integration with HA as a push source.
+
+**Architecture contract:** Conduit is a standalone Python package. HA hosts it
+via a thin `custom_components/conduit/` wrapper that calls `conduit.run_pipeline()`.
+Conduit internals never import HA internals — the wrapper is the only HA-specific
+file. This preserves the path to Phase 1 without a rewrite.
+
+- **Orchestrator:** HA automation with a time trigger calls the Conduit pipeline service.
+- **Webhook receiver:** HA's built-in webhook trigger — voice commands and automations
+  push raw items to Conduit's HA source adapter directly.
+- **Secrets:** HA `secrets.yaml` / HA credential store.
+- **State:** SQLite file (local, zero-cost) for MVP; swap to managed Postgres in Phase 1.
+- **Sink:** Jot via Supabase Edge Function (scoped bearer token).
+- **Distribution:** HACS (Home Assistant Community Store) for home users.
 
 ### Phase 1 — Beta / small real usage
-- Scale-to-zero container (e.g. Cloud Run) on a scheduler.
+- Scale-to-zero container (e.g. Cloud Run) on a scheduler — same Conduit package,
+  different hosting wrapper; no internal changes.
 - Managed Postgres (paid small tier).
 - A queue between extraction and sinks so a slow sink can't stall ingestion.
 - Stand up the CalDAV server (small always-on host) when live sync is needed.
