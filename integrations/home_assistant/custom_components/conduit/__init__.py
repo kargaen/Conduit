@@ -5,18 +5,20 @@ Setup
 1. Copy this folder to <config>/custom_components/conduit/
 2. Create <config>/conduit/config.json:
    {
-     "llm_provider":  "gemini",
-     "gemini_api_key": "AIza...",
-     "inbox_dir":     "/config/conduit/inbox",
-     "output_dir":    "/config/conduit/output",
-     "db_path":       "/config/conduit/conduit.db",
+     "llm_provider": "gemini",
+     "llm_api_key":  "AIza...",
+     "llm_model":    "gemini-2.5-flash",
+     "inbox_dir":    "/config/conduit/inbox",
+     "output_dir":   "/config/conduit/output",
+     "db_path":      "/config/conduit/conduit.db",
      "confidence_threshold": 0.5
    }
 
-   To switch to Anthropic Claude instead:
+   To switch providers, change values only — keys stay the same:
    {
-     "llm_provider":      "anthropic",
-     "anthropic_api_key": "sk-ant-...",
+     "llm_provider": "anthropic",
+     "llm_api_key":  "sk-ant-...",
+     "llm_model":    "claude-haiku-4-5-20251001",
      ...
    }
 3. Restart Home Assistant.
@@ -74,13 +76,21 @@ def _load_config() -> dict | None:
 
 
 def _build_provider(cfg: dict) -> Any:
-    name = cfg.get("llm_provider", "gemini").lower()
+    api_key = cfg["llm_api_key"]
+    model   = cfg.get("llm_model")
+    name    = cfg.get("llm_provider", "gemini").lower()
     if name == "anthropic":
         from conduit.adapters.llm.anthropic import AnthropicProvider
-        return AnthropicProvider(api_key=cfg["anthropic_api_key"])
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        return AnthropicProvider(**kwargs)
     # default: gemini
     from conduit.adapters.llm.gemini import GeminiProvider
-    return GeminiProvider(api_key=cfg["gemini_api_key"])
+    kwargs = {"api_key": api_key}
+    if model:
+        kwargs["model"] = model
+    return GeminiProvider(**kwargs)
 
 
 def _run_pipeline(cfg: dict) -> None:

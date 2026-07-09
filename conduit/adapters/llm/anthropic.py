@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Literal
 
 import anthropic as _anthropic
@@ -14,21 +13,18 @@ _TOOL_NAME = "extract_tasks"
 class AnthropicProvider:
     """LLMProvider backed by Anthropic Claude.
 
-    Both tiers map to a single model unless two distinct model IDs are given.
-    If only `bulk_model` is provided, `accurate` calls fall back to it too —
-    per the LLMRegistry design: never fail just because a second tier is absent.
+    tier is ignored at the model level — both tiers use the same model.
+    Route to different models by instantiating separate providers if needed.
     """
 
     def __init__(
         self,
         api_key: str,
-        bulk_model: str = "claude-haiku-4-5-20251001",
-        accurate_model: str | None = None,
+        model: str = "claude-haiku-4-5-20251001",
     ) -> None:
         self.id = "anthropic"
         self._client = _anthropic.Anthropic(api_key=api_key)
-        self._bulk_model = bulk_model
-        self._accurate_model = accurate_model or bulk_model
+        self._model = model
 
     def complete(
         self,
@@ -36,9 +32,6 @@ class AnthropicProvider:
         output_schema: dict[str, Any],
         tier: Literal["bulk", "accurate"],
     ) -> Any:
-        model = self._accurate_model if tier == "accurate" else self._bulk_model
-
-        # Wrap array schema in object — Anthropic requires object at root.
         tool_schema: dict[str, Any] = {
             "type": "object",
             "required": ["tasks"],
@@ -46,7 +39,7 @@ class AnthropicProvider:
         }
 
         response = self._client.messages.create(
-            model=model,
+            model=self._model,
             max_tokens=4096,
             tools=[
                 {

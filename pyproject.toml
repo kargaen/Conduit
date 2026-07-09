@@ -9,6 +9,9 @@ description = "Source-agnostic task extraction middleware"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["conduit*"]
