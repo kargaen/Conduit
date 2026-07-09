@@ -5,11 +5,19 @@ Setup
 1. Copy this folder to <config>/custom_components/conduit/
 2. Create <config>/conduit/config.json:
    {
-     "anthropic_api_key": "sk-ant-...",
-     "inbox_dir":          "/config/conduit/inbox",
-     "output_dir":         "/config/conduit/output",
-     "db_path":            "/config/conduit/conduit.db",
+     "llm_provider":  "gemini",
+     "gemini_api_key": "AIza...",
+     "inbox_dir":     "/config/conduit/inbox",
+     "output_dir":    "/config/conduit/output",
+     "db_path":       "/config/conduit/conduit.db",
      "confidence_threshold": 0.5
+   }
+
+   To switch to Anthropic Claude instead:
+   {
+     "llm_provider":      "anthropic",
+     "anthropic_api_key": "sk-ant-...",
+     ...
    }
 3. Restart Home Assistant.
 4. Drop .txt files into the inbox_dir.
@@ -25,7 +33,6 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, ServiceCall
 
-from conduit.adapters.llm.anthropic import AnthropicProvider
 from conduit.adapters.sinks.file import FileSink
 from conduit.adapters.sources.file import FileSource
 from conduit.adapters.store.sqlite import SQLiteTaskStore
@@ -66,14 +73,23 @@ def _load_config() -> dict | None:
         return None
 
 
+def _build_provider(cfg: dict) -> Any:
+    name = cfg.get("llm_provider", "gemini").lower()
+    if name == "anthropic":
+        from conduit.adapters.llm.anthropic import AnthropicProvider
+        return AnthropicProvider(api_key=cfg["anthropic_api_key"])
+    # default: gemini
+    from conduit.adapters.llm.gemini import GeminiProvider
+    return GeminiProvider(api_key=cfg["gemini_api_key"])
+
+
 def _run_pipeline(cfg: dict) -> None:
-    api_key: str = cfg["anthropic_api_key"]
     inbox_dir  = Path(cfg.get("inbox_dir",  "/config/conduit/inbox"))
     output_dir = Path(cfg.get("output_dir", "/config/conduit/output"))
     db_path    = Path(cfg.get("db_path",    "/config/conduit/conduit.db"))
     threshold  = float(cfg.get("confidence_threshold", 0.5))
 
-    provider = AnthropicProvider(api_key=api_key)
+    provider = _build_provider(cfg)
 
     # Minimal LLMRegistry inline — no extra classes needed.
     class _Registry:
