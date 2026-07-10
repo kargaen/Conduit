@@ -1,6 +1,6 @@
 ---
 name: rabbit-hole-check
-description: Use this skill when a request cannot be safely implemented as asked — it conflicts with ARCHITECTURE.md, crosses layers without permission, requires hidden global state, solves a product problem with an architectural workaround, or needs a brittle hack. Also use when the same approach has failed twice: a fix broke working behaviour, a patch needed a patch, or the same error reappeared after a supposed fix. Provides the rabbit-hole and iteration-trap response formats and the exit-path checklist. Do not use for ordinary scope questions that stopping and asking would answer — that is the assumption policy in AGENTS.md.
+description: Use this skill when a request cannot be safely implemented as asked — it conflicts with ARCHITECTURE.md, crosses layers without permission, requires hidden global state, solves a product problem with an architectural workaround, or needs a brittle hack. Also use when the same approach has failed twice: a fix broke working behaviour, a patch needed a patch, or the same error reappeared after a supposed fix. Provides the rabbit-hole and iteration-trap response formats and the exit-path checklist. Do not use for ordinary scope questions that stopping and asking would answer — that is the assumption policy in CLAUDE.md.
 ---
 
 # Rabbit Hole Check

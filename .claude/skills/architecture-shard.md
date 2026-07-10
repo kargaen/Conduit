@@ -93,5 +93,5 @@ Differences should be headers and nothing else. Any prose difference is a bug.
 
 ### 6. Stop
 
-Do not update AGENTS.md. It refers to `ARCHITECTURE.md` by name, which still exists and is
-still the entry point. If sharding required an AGENTS.md change, the layout is wrong.
+Do not update CLAUDE.md. It refers to `ARCHITECTURE.md` by name, which still exists and is
+still the entry point. If sharding required a CLAUDE.md change, the layout is wrong.

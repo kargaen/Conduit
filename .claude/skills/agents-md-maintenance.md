@@ -1,9 +1,9 @@
 ---
 name: agents-md-maintenance
-description: Use this skill whenever AGENTS.md is being read for editing, added to, trimmed, or reviewed — including when the user says "add a rule for the agent", "the agent keeps doing X, stop it", "put this in AGENTS.md", or proposes any new agent instruction without naming a file. Also use when reviewing an AGENTS.md that may have accumulated project-specific content. This skill enforces the one invariant that makes AGENTS.md safe to copy across every repository, and routes rejected content to the file that should own it. Trigger it even for edits that look obviously fine — a single project noun is enough to break the invariant.
+description: Use this skill whenever CLAUDE.md is being read for editing, added to, trimmed, or reviewed — including when the user says "add a rule for the agent", "the agent keeps doing X, stop it", "put this in CLAUDE.md", or proposes any new agent instruction without naming a file. Also use when reviewing a CLAUDE.md that may have accumulated project-specific content. This skill enforces the one invariant that makes CLAUDE.md safe to copy across every repository, and routes rejected content to the file that should own it. Trigger it even for edits that look obviously fine — a single project noun is enough to break the invariant.
 ---
 
-# Maintaining AGENTS.md
+# Maintaining CLAUDE.md
 
 ## Input
 
@@ -17,12 +17,12 @@ report. Do not invent a rule.
 
 **Waivable by explicit instruction:** the propose-and-wait step ("just do it" → apply, show
 the diff).
-**Not waivable:** the invariant. A project fact does not enter AGENTS.md because the user
+**Not waivable:** the invariant. A project fact does not enter CLAUDE.md because the user
 asked twice. Route it and say why.
 
 ## Invariant
 
-AGENTS.md contains nothing true of only one project. It is copied verbatim into every repo
+CLAUDE.md contains nothing true of only one project. It is copied verbatim into every repo
 and overwritten on re-broadcast; project content in it is silently clobbered on the next sync
 and, until then, lies to every other repo. Cite this reason when pushing back.
 
@@ -36,7 +36,7 @@ and, until then, lies to every other repo. Cite this reason when pushing back.
 **1. Universal** — true anywhere, verifiable, names nothing specific. Accept.
 
 **2. General rule, project vocabulary** — the rule is universal, its nouns are local. Do not
-delete. Parameterize: AGENTS.md states the rule, `ARCHITECTURE.md` holds the vocabulary.
+delete. Parameterize: CLAUDE.md states the rule, `ARCHITECTURE.md` holds the vocabulary.
 
 Proposed: `Work on one MVC layer at a time. Never edit a view during a controller task.`
 
@@ -59,17 +59,17 @@ Never reject without naming a destination.
 | Content | Destination |
 |---|---|
 | Structural fact about the codebase | `ARCHITECTURE.md` (via `architecture-md-maintenance`) |
-| Rule applying only inside one directory | Nested `AGENTS.md` in that directory |
+| Rule applying only inside one directory | Nested `CLAUDE.md` in that directory |
 | Multi-step procedure or runbook | Skill under `.claude/skills/`, declared in `ARCHITECTURE.md` |
 | Not built yet | An epic (via `epic-formulation`) |
 | Personal, uncommitted preference | `AGENTS.local.md`, gitignored |
 
-Nested `AGENTS.md` is honored by every major harness (closest file wins) and is underused.
+Nested `CLAUDE.md` is honored by every major harness (closest file wins) and is underused.
 
 ## Detect
 
 ```bash
-python scripts/leak_check.py AGENTS.md
+python scripts/leak_check.py CLAUDE.md
 ```
 
 Flags paths, camelCase/PascalCase identifiers, vendor names, named skills, non-whitelisted
@@ -82,7 +82,7 @@ documents. It misses semantic leaks. Also read the file for:
 
 ## Trim
 
-AGENTS.md loads on every run in every repo forever. Also ask what should leave.
+CLAUDE.md loads on every run in every repo forever. Also ask what should leave.
 
 Extract a rule to a skill only if the agent notices the trigger without having read the skill:
 
@@ -102,7 +102,7 @@ Verdict: <universal | general rule with project vocabulary | project fact>
 Why:
 <one sentence, citing the acceptance test>
 
-Proposed for AGENTS.md:
+Proposed for CLAUDE.md:
 <the parameterized rule, or "nothing">
 
 Proposed for ARCHITECTURE.md §<n>:
@@ -117,20 +117,20 @@ said "just do it" — then show the diff.
 ## Editing rules
 
 - Merge duplicate rules. A rule stated twice will eventually be edited once.
-- Never cite `ARCHITECTURE.md` section numbers from AGENTS.md; those numbers are project-specific.
+- Never cite `ARCHITECTURE.md` section numbers from CLAUDE.md; those numbers are project-specific.
 - Every rule must be verifiable. If you cannot imagine the check, cut it.
 
 ## Example
 
 **User:** "The agent keeps forgetting to run `pyside6-uic` after touching a `.ui` file. Add
-that to AGENTS.md."
+that to CLAUDE.md."
 
 ```md
 Verdict: project fact
 
 Why: `.ui` files and `pyside6-uic` exist in one repository. Copied elsewhere, this is noise.
 
-Proposed for AGENTS.md:
+Proposed for CLAUDE.md:
 nothing.
 
 Proposed for ARCHITECTURE.md, Conventions:

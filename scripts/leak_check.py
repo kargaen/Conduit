@@ -11,7 +11,7 @@ import re
 import sys
 
 # Documents any repo is allowed to reference by name.
-DOC_WHITELIST = {"AGENTS.md", "ARCHITECTURE.md", "README.md", "CODEOWNERS"}
+DOC_WHITELIST = {"AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md", "README.md", "CODEOWNERS"}
 
 VENDORS = [
     "react", "vue", "svelte", "angular", "next.js", "nextjs", "django", "flask",
